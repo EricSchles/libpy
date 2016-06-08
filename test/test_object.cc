@@ -17,20 +17,26 @@ TEST(Layout, py_object) {
 class Object : public testing::Test {
 protected:
     py::object C;
+    py::object container;
 
     Object() : C(nullptr) {}
 
     virtual void SetUp() {
         PyObject *ns = PyEval_GetBuiltins();
         // create a type so that it has a mutable dict
-        this->C = PyRun_String("type('C', (), {})",
-                               Py_eval_input,
-                               ns,
-                               ns);
+        C = PyRun_String("type('C', (), {})",
+                         Py_eval_input,
+                         ns,
+                         ns);
+        container = PyRun_String("[1, 2, 3]",
+                                 Py_eval_input,
+                                 ns,
+                                 ns);
     }
 
     virtual void TearDown() {
-        this->C.decref();
+        C.decref();
+        container.decref();
     }
 };
 
@@ -94,10 +100,18 @@ TEST_F(Object, getattr) {
 }
 
 TEST_F(Object, setattr_delattr) {
-    ASSERT_FALSE(this->C.hasattr("test"_p));
-    ASSERT_EQ(this->C.setattr("test"_p, 1_p), 0);
-    EXPECT_TRUE(this->C.hasattr("test"_p));
-    EXPECT_EQ((PyObject*) this->C.getattr("test"_p), (PyObject*) 1_p);
-    ASSERT_EQ(this->C.delattr("test"_p), 0);
-    EXPECT_FALSE(this->C.hasattr("test"_p));
+    ASSERT_FALSE(C.hasattr("test"_p));
+    ASSERT_EQ(C.setattr("test"_p, 1_p), 0);
+    EXPECT_TRUE(C.hasattr("test"_p));
+    EXPECT_EQ((PyObject*) C.getattr("test"_p), (PyObject*) 1_p);
+    ASSERT_EQ(C.delattr("test"_p), 0);
+    EXPECT_FALSE(C.hasattr("test"_p));
+}
+
+TEST_F(Object, setitem_syntax) {
+    std::array<py::object, 3> indices = {0_p, 1_p, 2_p};
+    for (const auto &idx : indices) {
+        container[idx] = -idx;
+        EXPECT_TRUE((container[idx] == -idx).istrue());
+    }
 }

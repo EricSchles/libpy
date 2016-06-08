@@ -76,12 +76,15 @@ namespace py {
         friend T;
 
         nonnull<T> &operator=(const nonnull &cpfrom) {
-            nonnull<T> tmp(cpfrom);
-            return (*this = std::move(tmp));
+            this->decref();
+            this->ob = cpfrom.ob;
+            this->incref();
+            return *this;
         }
 
         nonnull<T> &operator=(nonnull &&mvfrom) noexcept {
-            this.ob = mvfrom.ob;
+            this->decref();
+            this->ob = mvfrom.ob;
             mvfrom.ob = nullptr;
             return *this;
         }
@@ -124,12 +127,14 @@ namespace py {
         using T::operator=;
 
         tmpref &operator=(const tmpref &cpfrom) {
+            this->decref();
             this->ob = cpfrom.ob;
             this->incref();
             return *this;
         }
 
         tmpref &operator=(tmpref &&mvfrom) {
+            this->decref();
             this->ob = mvfrom.ob;
             mvfrom.ob = nullptr;
             return *this;
@@ -191,12 +196,14 @@ namespace py {
         using tmpref<T>::operator=;
 
         ownedref &operator=(const ownedref &cpfrom) {
+            this->decref();
             this->ob = cpfrom.ob;
             this->incref();
             return *this;
         }
 
         ownedref &operator=(ownedref &&mvfrom) {
+            this->decref();
             this->ob = mvfrom.ob;
             mvfrom.ob = nullptr;
             return *this;
@@ -204,7 +211,7 @@ namespace py {
 
         void invalidate() && {
             this->decref();
-            tmpref<T>::invalidate();
+            this->ob = nullptr;
         }
     };
 
@@ -212,6 +219,9 @@ namespace py {
         template<typename T>
         class iterator;
     }
+
+    template<typename T, typename C = object, typename L = object>
+    class getitem_result;
 
     /**
        A wrapper around `PyObject*` to provide a C++ interface to the
@@ -273,6 +283,7 @@ namespace py {
         friend const object &operator""_p(const wchar_t *cs, std::size_t len);
         friend const object &operator""_p(long double d);
         friend tmpref<object>;
+        friend getitem_result<object>;
 
         /**
            Default constructor. The underyling pointer will be nullptr.
@@ -705,15 +716,12 @@ namespace py {
            Lookup an item in a collection.
 
            This is equivalent to: `this.getitem(key)`.
-           This does not support setitem syntax like: `this[key] = value`.
 
            @param key The key to lookup.
            @return    The value for the given key.
         */
         template<typename T>
-        tmpref<object> operator[](const T &key) const {
-            return ob_binary_func<PyObject_GetItem>(key);
-        }
+        getitem_result<object> operator[](const T &key) const;
 
         /**
            Lookup an item in a collection.
@@ -750,8 +758,7 @@ namespace py {
         /**
            Delete a key from a collection.
 
-           This is equivalent to: `del this[key]` in Python or
-           `this.setitem(key, nullptr)` in C++.
+           This is equivalent to: `del this[key]` in Python.
 
            @param key The key to delete.
            @return    zero on success, non-zero if an exception occured.
@@ -867,6 +874,7 @@ namespace py {
         #include "libpy/_tuple_templates.h"
     }
 
+
     template<typename... Ts>
     tmpref<object> object::operator()(const Ts&... args) const {
         if (!pyutils::all_nonnull(*this, args...)) {
@@ -880,6 +888,86 @@ namespace py {
             return nullptr;
         }
         return PyObject_Call(ob, pyargs.ob, nullptr);
+    }
+
+    /**
+       A class for managing the result of `ob[key]`.
+
+       We must also store the container and the key to support syntax like:
+       `ob[key] = value`
+       which should call `ob.setitem(key, value)` internally.
+    */
+    template<typename T, typename C, typename K>
+    class getitem_result : public tmpref<T> {
+    protected:
+        ownedref<C> container;
+        ownedref<K> key;
+    public:
+
+        friend T;
+
+        getitem_result() = delete;
+        getitem_result(PyObject *pob, object c, object k)
+            : tmpref<T>(pob), container(c), key(k)  {}
+
+        getitem_result(const getitem_result &cpfrom)
+            : tmpref<T>(cpfrom.ob),
+            container(cpfrom.container),
+            key(cpfrom.key) {}
+
+        getitem_result(getitem_result &&mvfrom)
+            : tmpref<T>(mvfrom.ob),
+            container(mvfrom.container),
+            key(mvfrom.key) {
+            mvfrom.ob = nullptr;
+            std::move(mvfrom.container).invalidate();
+            std::move(mvfrom.key).invalidate();
+        }
+
+        getitem_result &operator=(const T &cpfrom) {
+            this->decref();
+            this->ob = cpfrom.ob;
+            this->incref();
+
+            container.setitem(key, *this);
+            return *this;
+        }
+
+        getitem_result &operator=(T &&mvfrom) {
+            this->decref();
+            this->ob = mvfrom.ob;
+            mvfrom.ob = nullptr;
+
+            container.setitem(key, *this);
+            return *this;
+        }
+
+        getitem_result &operator=(const getitem_result &cpfrom) {
+            this->decref();
+            this->ob = cpfrom.ob;
+            this->incref();
+
+            container.setitem(key, *this);
+            return *this;
+        }
+
+        getitem_result &operator=(getitem_result &&mvfrom) {
+            this->decref();
+            this->ob = mvfrom.ob;
+            mvfrom.ob = nullptr;
+
+            container.setitem(key, *this);
+            return *this;
+        }
+    };
+
+    // implementation must go after getitem_result<object> is defined.
+    template<typename T>
+    getitem_result<object> object::operator[](const T &key) const {
+        getitem_result<object> res(ob_binary_func<PyObject_GetItem>(key),
+                                   this->ob,
+                                   key);
+        return res;
     }
 
     namespace iter {
@@ -910,12 +998,16 @@ namespace py {
                 : it(std::move(t.it)), last(std::move(t.last)) {}
 
             iterator &operator=(const iterator &t) {
+                this->it.decref();
+                this.last.decref();
                 it = t.it;
                 last = t.last;
                 return *this;
             }
 
             iterator &operator=(iterator &&t) {
+                this->it.decref();
+                this.last.decref();
                 it = std::move(t.it);
                 last = std::move(t.last);
                 return *this;

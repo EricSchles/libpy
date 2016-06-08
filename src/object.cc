@@ -75,11 +75,14 @@ std::ostream &py::operator<<(std::ostream &stream, const py::object &ob) {
 }
 
 py::object &py::object::operator=(const py::object &cpfrom) {
-    py::object tmp(cpfrom);
-    return (*this = std::move(tmp));
+    this->decref();
+    ob = cpfrom.ob;
+    this->incref();
+    return *this;
 }
 
 py::object &py::object::operator=(py::object &&mvfrom) noexcept {
+    this->decref();
     ob = mvfrom.ob;
     mvfrom.ob = nullptr;
     return *this;
