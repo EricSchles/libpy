@@ -73,30 +73,41 @@ py::ssize_t l::object::len() const {
     return PyList_GET_SIZE(ob);
 }
 
-py::object l::object::operator[](int idx) const {
+py::getitem_result<py::object,
+                   l::object,
+                   int> l::object::operator[](int idx) const {
     if (!is_nonnull()) {
         pyutils::failed_null_check();
         return nullptr;
     }
-    return PyList_GET_ITEM(ob, idx);
+    return getitem_result<py::object,
+                          l::object,
+                          int>(PyList_GET_ITEM(ob, idx), *this, idx);
 }
 
-py::object l::object::operator[](py::ssize_t idx) const {
+py::getitem_result<py::object,
+                   l::object,
+                   py::ssize_t> l::object::operator[](py::ssize_t idx) const {
     if (!is_nonnull()) {
         pyutils::failed_null_check();
         return nullptr;
     }
-    return PyList_GET_ITEM(ob, idx);
+    return getitem_result<py::object,
+                          l::object,
+                          py::ssize_t>(PyList_GET_ITEM(ob, idx), *this, idx);
 }
 
-py::object l::object::operator[](std::size_t idx) const {
+py::getitem_result<py::object,
+                   l::object,
+                   std::size_t> l::object::operator[](std::size_t idx) const {
     if (!is_nonnull()) {
         pyutils::failed_null_check();
         return nullptr;
     }
-    return PyList_GET_ITEM(ob, idx);
+    return getitem_result<py::object,
+                          l::object,
+                          std::size_t>(PyList_GET_ITEM(ob, idx), *this, idx);
 }
-
 
 py::nonnull<l::object> l::object::as_nonnull() const {
     if (!is_nonnull()) {

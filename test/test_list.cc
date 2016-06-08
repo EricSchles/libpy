@@ -25,6 +25,16 @@ TEST(List, object_indexing) {
     }
 }
 
+TEST(List, setitem) {
+    std::array<py::object, 3> indices = {0_p, 1_p, 2_p};
+    auto ob = py::list::pack(1_p, 2_p, 3_p);
+
+    for (const auto &idx : indices) {
+        ob[idx] = -idx;
+        EXPECT_TRUE((ob[idx] == -idx).istrue());
+    }
+}
+
 TEST(List, ssize_t_indexing) {
     std::array<py::object, 3> expected = {0_p, 1_p, 2_p};
     auto ob = py::list::pack(0_p, 1_p, 2_p);

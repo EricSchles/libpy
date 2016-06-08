@@ -7,6 +7,8 @@
 
 #include "libpy/libpy.h"
 
+#include "utils.h"
+
 using py::operator""_p;
 
 TEST(Layout, py_object) {
@@ -18,6 +20,7 @@ class Object : public testing::Test {
 protected:
     py::object C;
     py::object container;
+    py::object immutable_container;
 
     Object() : C(nullptr) {}
 
@@ -32,11 +35,16 @@ protected:
                                  Py_eval_input,
                                  ns,
                                  ns);
+        immutable_container = PyRun_String("(1, 2, 3)",
+                                           Py_eval_input,
+                                           ns,
+                                           ns);
     }
 
     virtual void TearDown() {
         C.decref();
         container.decref();
+        immutable_container.decref();
     }
 };
 
@@ -114,4 +122,12 @@ TEST_F(Object, setitem_syntax) {
         container[idx] = -idx;
         EXPECT_TRUE((container[idx] == -idx).istrue());
     }
+
+    // test writing to a tuple which should fail
+    ASSERT_FALSE((immutable_container[0_p] = -1_p))
+        << "assignment to tuple should be nullptr";
+    EXPECT_PYTHON_ERR(PyExc_TypeError);
+
+    // make sure that the value hasn't changed
+    EXPECT_TRUE((immutable_container[0_p] == 1_p).istrue());
 }

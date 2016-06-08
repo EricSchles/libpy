@@ -220,7 +220,7 @@ namespace py {
         class iterator;
     }
 
-    template<typename T, typename C = object, typename L = object>
+    template<typename T, typename C = object, typename K = object>
     class getitem_result;
 
     /**
@@ -724,9 +724,7 @@ namespace py {
         getitem_result<object> operator[](const T &key) const;
 
         /**
-           Lookup an item in a collection.
-
-           This is equivalent to: `this[key]`.
+           Lookup an item in a collection without creating a `getitem_result`.
 
            @param key The key to lookup.
            @return    The value for the given key.
@@ -914,13 +912,16 @@ namespace py {
         ownedref<C> container;
         K key;
 
-        getitem_result(PyObject *pob, object c, object k)
+        getitem_result(PyObject *pob, C c, K k)
             : tmpref<T>(pob), container(c), key(k)  {}
-    public:
 
-        friend T;
+    public:
+        friend C;
 
         getitem_result() = delete;
+
+        getitem_result(std::nullptr_t)
+            : tmpref<T>(nullptr), container(nullptr), key() {}
 
         getitem_result(const getitem_result &cpfrom)
             : tmpref<T>(cpfrom.ob),
@@ -941,7 +942,9 @@ namespace py {
             this->ob = cpfrom.ob;
             this->incref();
 
-            container.setitem(key, *this);
+            if (container.setitem(key, *this)) {
+                this->clear();
+            }
             return *this;
         }
 
@@ -950,7 +953,9 @@ namespace py {
             this->ob = mvfrom.ob;
             mvfrom.ob = nullptr;
 
-            container.setitem(key, *this);
+            if (container.setitem(key, *this)) {
+                this->clear();
+            }
             return *this;
         }
 
@@ -959,7 +964,9 @@ namespace py {
             this->ob = cpfrom.ob;
             this->incref();
 
-            container.setitem(key, *this);
+            if (container.setitem(key, *this)) {
+                this->clear();
+            }
             return *this;
         }
 
@@ -968,7 +975,9 @@ namespace py {
             this->ob = mvfrom.ob;
             mvfrom.ob = nullptr;
 
-            container.setitem(key, *this);
+            if (container.setitem(key, *this)) {
+                this->clear();
+            }
             return *this;
         }
     };
@@ -976,10 +985,15 @@ namespace py {
     // implementation must go after getitem_result<object> is defined.
     template<typename T>
     getitem_result<object> object::operator[](const T &key) const {
-        getitem_result<object> res(ob_binary_func<PyObject_GetItem>(key),
-                                   this->ob,
-                                   ownedref<object>(key));
-        return res;
+        object res(ob_binary_func<PyObject_GetItem>(key));
+
+        if (!res.is_nonnull()) {
+            return nullptr;
+        }
+
+        return getitem_result<object>(res,
+                                      this->ob,
+                                      ownedref<object>(key));
     }
 
     namespace iter {

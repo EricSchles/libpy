@@ -67,7 +67,23 @@ namespace py{
             */
             ssize_t len() const;
 
-            using py::object::operator[];
+            /**
+               Override the operator[] to not return `getitem_result`s because
+               tuple is immutable.
+
+               @param key The key to look up as a python object.
+               @return    The value at the given index.
+            */
+            template<typename T>
+            py::tmpref<py::object> operator[](const T &key) const {
+                /* TODO: optimize around indexing with py::long_::objects
+                   by forwarding to the operator[](py::ssize_t) */
+                return ob_binary_func<PyObject_GetItem>(key);
+            }
+
+
+            /* these are not defined as a template because it is ambigious with
+               the template above */
 
             /**
                Get the object at `idx` without bounds checking.
@@ -75,11 +91,29 @@ namespace py{
                @param idx The integer index into the tuple.
                @return    The object at index `idx`.
             */
-            // this is not a template because it is ambigious with the template
-            // defined in the base class
-            py::object operator[](int idx) const;
-            py::object operator[](ssize_t idx) const;
-            py::object operator[](std::size_t idx) const;
+            inline py::object operator[](int idx) const {
+                return getitem(idx);
+            }
+
+            /**
+               Get the object at `idx` without bounds checking.
+
+               @param idx The integer index into the tuple.
+               @return    The object at index `idx`.
+            */
+            inline py::object operator[](py::ssize_t idx) const {
+                return getitem(idx);
+            }
+
+            /**
+               Get the object at `idx` without bounds checking.
+
+               @param idx The integer index into the tuple.
+               @return    The object at index `idx`.
+            */
+            inline py::object operator[](std::size_t idx) const {
+                return getitem(idx);
+            }
 
 
             /**
@@ -88,7 +122,11 @@ namespace py{
             template<typename I,
                      typename = std::enable_if_t<std::is_integral<I>::value>>
             py::object getitem(I idx) const {
-                return *this[idx];
+                if (!is_nonnull()) {
+                    pyutils::failed_null_check();
+                    return nullptr;
+                }
+                return PyTuple_GET_ITEM(ob, idx);
             }
 
             /**

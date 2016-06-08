@@ -18,6 +18,7 @@ namespace py{
             void list_check();
         public:
             friend class py::tmpref<object>;
+            friend class py::getitem_result<object>;
 
             /**
                Default constructor. This will set `ob` to nullptr.
@@ -82,18 +83,29 @@ namespace py{
             */
             // this is not a template because it is ambigious with the template
             // defined in the base class
-            py::object operator[](int idx) const;
-            py::object operator[](py::ssize_t idx) const;
-            py::object operator[](std::size_t idx) const;
+            py::getitem_result<py::object,
+                               object,
+                               int> operator[](int idx) const;
+            py::getitem_result<py::object,
+                               object,
+                               py::ssize_t> operator[](py::ssize_t idx) const;
+            py::getitem_result<py::object,
+                               object,
+                               std::size_t> operator[](std::size_t idx) const;
 
 
             /**
-               Alias for operator[].
+               Alias for operator[] which doesn't return a `getitem_result`.
             */
             template<typename I,
                      typename = std::enable_if_t<std::is_integral<I>::value>>
             py::object getitem(I idx) const {
-                return *this[idx];
+                if (!is_nonnull()) {
+                    pyutils::failed_null_check();
+                    return nullptr;
+                }
+
+                return PyList_GET_ITEM(ob, idx);
             }
 
             /**
