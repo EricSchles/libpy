@@ -891,6 +891,17 @@ namespace py {
     }
 
     /**
+       Call the invalidate method on an object iff it is available.
+    */
+    template<typename T>
+    decltype(std::declval<T>().invalidate()) _invalidate_if_possible(T a) {
+        return a.invalidate();
+    }
+
+    template<typename T>
+    void _invalidate_if_possible(T) {}
+
+    /**
        A class for managing the result of `ob[key]`.
 
        We must also store the container and the key to support syntax like:
@@ -901,14 +912,15 @@ namespace py {
     class getitem_result : public tmpref<T> {
     protected:
         ownedref<C> container;
-        ownedref<K> key;
+        K key;
+
+        getitem_result(PyObject *pob, object c, object k)
+            : tmpref<T>(pob), container(c), key(k)  {}
     public:
 
         friend T;
 
         getitem_result() = delete;
-        getitem_result(PyObject *pob, object c, object k)
-            : tmpref<T>(pob), container(c), key(k)  {}
 
         getitem_result(const getitem_result &cpfrom)
             : tmpref<T>(cpfrom.ob),
@@ -921,7 +933,7 @@ namespace py {
             key(mvfrom.key) {
             mvfrom.ob = nullptr;
             std::move(mvfrom.container).invalidate();
-            std::move(mvfrom.key).invalidate();
+            _invalidate_if_possible(std::move(mvfrom.key));
         }
 
         getitem_result &operator=(const T &cpfrom) {
@@ -966,7 +978,7 @@ namespace py {
     getitem_result<object> object::operator[](const T &key) const {
         getitem_result<object> res(ob_binary_func<PyObject_GetItem>(key),
                                    this->ob,
-                                   key);
+                                   ownedref<object>(key));
         return res;
     }
 
